@@ -14,8 +14,7 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.vigchat.R;
-import com.example.vigchat.data.LocalChatRepository;
-import com.example.vigchat.models.ChatRoom;
+import com.example.vigchat.utils.FirebaseHelper;
 import com.example.vigchat.utils.QRCodeHelper;
 
 import java.util.UUID;
@@ -64,36 +63,61 @@ public class CreateRoomActivity extends AppCompatActivity {
 
     private void signInAndCreateRoom() {
         createRoomBtn.setEnabled(false);
-        roomStatusText.setText("Preparing your local room...");
-        createRoom(LocalChatRepository.getOrCreateCurrentUserId(this));
+        roomStatusText.setText("Signing in to create your room...");
+        FirebaseHelper.ensureSignedIn(
+                this::createRoom,
+                exception -> {
+                    createRoomBtn.setEnabled(true);
+                    roomStatusText.setText("Unable to create room");
+                    Toast.makeText(
+                            this,
+                            FirebaseHelper.toUserMessage(exception, "creating room"),
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+        );
     }
 
     private void createRoom(String userId) {
         createRoomBtn.setEnabled(false);
         String roomId = UUID.randomUUID().toString();
         String joinLink = QRCodeHelper.generateRoomLink(roomId);
+        long createdAt = System.currentTimeMillis();
 
         roomStatusText.setText("Creating room...");
+        FirebaseHelper.createRoom(
+                roomId,
+                userId,
+                joinLink,
+                createdAt,
+                room -> {
+                    currentRoomId = room.getRoomId();
+                    currentRoomLink = room.getJoinLink();
 
-        ChatRoom room = new ChatRoom(roomId, userId, joinLink, System.currentTimeMillis());
-        LocalChatRepository.saveRoom(this, room);
+                    Bitmap qr = QRCodeHelper.generateQR(currentRoomLink);
+                    if (qr != null) {
+                        qrImage.setImageBitmap(qr);
+                    }
 
-        currentRoomId = room.getRoomId();
-        currentRoomLink = room.getJoinLink();
-
-        Bitmap qr = QRCodeHelper.generateQR(currentRoomLink);
-        if (qr != null) {
-            qrImage.setImageBitmap(qr);
-        }
-
-        roomStatusText.setText("Local room ready. Share this QR code or link from the app frontend.");
-        roomLinkText.setText(currentRoomLink);
-        roomLinkText.setVisibility(View.VISIBLE);
-        copyLinkBtn.setVisibility(View.VISIBLE);
-        shareLinkBtn.setVisibility(View.VISIBLE);
-        createRoomBtn.setText("Enter Chat Room");
-        createRoomBtn.setEnabled(true);
-        Toast.makeText(this, "Room created successfully", Toast.LENGTH_SHORT).show();
+                    roomStatusText.setText("Room ready. Share this QR code or link to join from other devices.");
+                    roomLinkText.setText(currentRoomLink);
+                    roomLinkText.setVisibility(View.VISIBLE);
+                    copyLinkBtn.setVisibility(View.VISIBLE);
+                    shareLinkBtn.setVisibility(View.VISIBLE);
+                    createRoomBtn.setText(R.string.enter_chat_room);
+                    createRoomBtn.setEnabled(true);
+                    Toast.makeText(this, "Room created successfully", Toast.LENGTH_SHORT).show();
+                },
+                exception -> {
+                    createRoomBtn.setEnabled(true);
+                    roomStatusText.setText("Unable to create room");
+                    Toast.makeText(
+                            this,
+                            FirebaseHelper.toUserMessage(exception, "creating room"),
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+        );
     }
 
     private void goToChat() {

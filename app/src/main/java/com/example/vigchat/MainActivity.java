@@ -3,6 +3,7 @@ package com.example.vigchat;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.EditText;
+import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
@@ -13,7 +14,6 @@ import androidx.core.view.WindowInsetsCompat;
 import com.example.vigchat.activities.ChatActivity;
 import com.example.vigchat.activities.CreateRoomActivity;
 import com.example.vigchat.activities.QRScannerActivity;
-import com.example.vigchat.data.LocalChatRepository;
 import com.example.vigchat.utils.QRCodeHelper;
 
 public class MainActivity extends AppCompatActivity {
@@ -33,8 +33,6 @@ public class MainActivity extends AppCompatActivity {
         });
 
         joinLinkInput = findViewById(R.id.joinLinkInput);
-        LocalChatRepository.getOrCreateCurrentUserId(this);
-
         findViewById(R.id.btnCreateRoom).setOnClickListener(v ->
                 startActivity(new Intent(this, CreateRoomActivity.class))
         );
@@ -56,9 +54,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void joinRoomFromInput() {
-        String roomId = QRCodeHelper.extractRoomId(joinLinkInput.getText().toString());
+        String input = joinLinkInput.getText().toString().trim();
+        if (input.isEmpty()) {
+            joinLinkInput.setError("Please enter a link or ID");
+            return;
+        }
+        
+        String roomId = QRCodeHelper.extractRoomId(input);
         if (roomId == null) {
-            joinLinkInput.setError("Paste a valid room link or room ID.");
+            joinLinkInput.setError("Invalid room link or ID.");
             return;
         }
         joinLinkInput.setError(null);
@@ -66,14 +70,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void handleIncomingIntent(Intent intent) {
+        if (intent == null) return;
+        
         String roomId = null;
-
         if (intent.getDataString() != null) {
             roomId = QRCodeHelper.extractRoomId(intent.getDataString());
-        }
-
-        if (roomId == null && Intent.ACTION_SEND.equals(intent.getAction())) {
-            roomId = QRCodeHelper.extractRoomId(intent.getStringExtra(Intent.EXTRA_TEXT));
+        } else if (Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType())) {
+            String sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);
+            roomId = QRCodeHelper.extractRoomId(sharedText);
         }
 
         if (roomId != null) {

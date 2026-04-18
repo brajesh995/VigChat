@@ -1,7 +1,13 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
     <style name="Base.Theme.VigChat" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+        <item name="colorPrimary">@color/brand_secondary</item>
+        <item name="colorOnPrimary">@color/brand_on_secondary</item>
+        <item name="colorSecondary">@color/brand_primary</item>
+        <item name="colorOnSecondary">@color/brand_on_primary</item>
+        <item name="android:colorBackground">@color/brand_surface_dark</item>
+        <item name="android:windowBackground">@color/brand_surface_dark</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/brand_surface_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

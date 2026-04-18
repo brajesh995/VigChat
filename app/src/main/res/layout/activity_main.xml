@@ -1,61 +1,157 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@drawable/bg_app_gradient"
+    android:clipToPadding="false"
+    android:fillViewport="true"
+    android:paddingLeft="20dp"
+    android:paddingTop="20dp"
+    android:paddingRight="20dp"
+    android:paddingBottom="28dp"
     tools:context=".MainActivity">
 
     <LinearLayout
-        android:id="@+id/main"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="24dp">
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_panel"
+            android:paddingLeft="14dp"
+            android:paddingTop="8dp"
+            android:paddingRight="14dp"
+            android:paddingBottom="8dp"
+            android:text="@string/welcome_kicker"
+            android:textAppearance="@style/TextAppearance.VigChat.SectionLabel" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
             android:text="@string/welcome_title"
-            android:textSize="24sp"
-            android:textStyle="bold" />
+            android:textAppearance="@style/TextAppearance.VigChat.Hero" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="10dp"
             android:text="@string/welcome_subtitle"
-            android:textSize="16sp" />
+            android:textAppearance="@style/TextAppearance.VigChat.Body" />
 
-        <Button
-            android:id="@+id/btnCreateRoom"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/create_room" />
+            android:layout_marginTop="28dp"
+            app:cardUseCompatPadding="true"
+            style="@style/Widget.VigChat.Card">
 
-        <Button
-            android:id="@+id/btnJoinRoom"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="22dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/create_section_title"
+                    android:textAppearance="@style/TextAppearance.VigChat.Title" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/create_section_subtitle"
+                    android:textAppearance="@style/TextAppearance.VigChat.Body" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCreateRoom"
+                    style="@style/Widget.VigChat.Button.Primary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:minHeight="56dp"
+                    android:text="@string/create_room" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/join_by_qr" />
+            android:layout_marginTop="18dp"
+            app:cardUseCompatPadding="true"
+            style="@style/Widget.VigChat.Card">
 
-        <EditText
-            android:id="@+id/joinLinkInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:hint="@string/link_hint"
-            android:inputType="textUri"
-            android:minHeight="48dp"
-            android:padding="12dp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="22dp">
 
-        <Button
-            android:id="@+id/btnJoinFromLink"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/join_by_link" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/join_section_title"
+                    android:textAppearance="@style/TextAppearance.VigChat.Title" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/join_section_subtitle"
+                    android:textAppearance="@style/TextAppearance.VigChat.Body" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.VigChat.TextInputLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:hint="@string/link_hint">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/joinLinkInput"
+                        style="@style/Widget.VigChat.InputEditText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textUri"
+                        android:minHeight="56dp" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnJoinFromLink"
+                        style="@style/Widget.VigChat.Button.Primary"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:layout_weight="1"
+                        android:minHeight="52dp"
+                        android:text="@string/join_by_link" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnJoinRoom"
+                        style="@style/Widget.VigChat.Button.Secondary"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:minHeight="52dp"
+                        android:text="@string/join_by_qr" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
 </ScrollView>

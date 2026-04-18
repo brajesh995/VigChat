@@ -2,12 +2,12 @@ package com.example.vigchat.activities;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.database.Cursor;
 import android.media.MediaRecorder;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
-import android.provider.OpenableColumns;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.Button;
@@ -21,16 +21,16 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
-import androidx.core.content.FileProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.vigchat.R;
 import com.example.vigchat.adapters.MessageAdapter;
-import com.example.vigchat.data.LocalChatRepository;
-import com.example.vigchat.models.ChatRoom;
 import com.example.vigchat.models.Message;
+import com.example.vigchat.utils.FileUploadHelper;
+import com.example.vigchat.utils.FirebaseHelper;
 import com.example.vigchat.utils.QRCodeHelper;
+import com.google.firebase.firestore.ListenerRegistration;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -40,6 +40,7 @@ public class ChatActivity extends AppCompatActivity {
 
     private String roomId;
     private String currentUserId;
+    private String currentUserName;
     private RecyclerView recyclerView;
     private MessageAdapter adapter;
     private final List<Message> messageList = new ArrayList<>();
@@ -53,7 +54,7 @@ public class ChatActivity extends AppCompatActivity {
     private MediaRecorder recorder;
     private String filePath;
     private boolean isAdmin = false;
-    private LocalChatRepository.Subscription messageSubscription;
+    private ListenerRegistration messageSubscription;
 
     private final ActivityResultLauncher<String[]> filePickerLauncher =
             registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
@@ -87,12 +88,56 @@ public class ChatActivity extends AppCompatActivity {
             return;
         }
 
-        currentUserId = LocalChatRepository.getOrCreateCurrentUserId(this);
-
         initUI();
         setupRecyclerView();
         setComposerEnabled(false);
-        loadRoom();
+        
+        showNameInputDialog();
+    }
+
+    private void showNameInputDialog() {
+        EditText nameInput = new EditText(this);
+        nameInput.setHint("Your Name");
+        int padding = (int) (16 * getResources().getDisplayMetrics().density);
+        nameInput.setPadding(padding, padding, padding, padding);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Enter your name")
+                .setMessage("Choose a name to be seen in the chat.")
+                .setView(nameInput)
+                .setCancelable(false)
+                .setPositiveButton("Join", (dialog, which) -> {
+                    String name = nameInput.getText().toString().trim();
+                    if (!name.isEmpty()) {
+                        currentUserName = name;
+                        signInAndLoadRoom();
+                    } else {
+                        Toast.makeText(this, "Name cannot be empty", Toast.LENGTH_SHORT).show();
+                        showNameInputDialog();
+                    }
+                })
+                .setNegativeButton("Exit", (dialog, which) -> finish())
+                .show();
+    }
+
+    private void signInAndLoadRoom() {
+        FirebaseHelper.ensureSignedIn(
+                userId -> {
+                    currentUserId = userId;
+                    adapter = new MessageAdapter(messageList, currentUserId);
+                    recyclerView.setAdapter(adapter);
+                    FirebaseHelper.joinMember(roomId, currentUserId);
+                    loadRoom();
+                },
+                exception -> {
+                    Toast.makeText(
+                            this,
+                            FirebaseHelper.toUserMessage(exception, "joining room"),
+                            Toast.LENGTH_LONG
+                    ).show();
+                    finish();
+                }
+        );
     }
 
     private void initUI() {
@@ -118,45 +163,55 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void setupRecyclerView() {
-        adapter = new MessageAdapter(messageList, currentUserId);
+        adapter = new MessageAdapter(messageList, "");
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
     }
 
     private void loadRoom() {
-        ChatRoom room = LocalChatRepository.getRoom(this, roomId);
-        if (room == null) {
-            Toast.makeText(
-                    this,
-                    "Room not found in frontend mode. Create the room first on this app, then join using its link or QR.",
-                    Toast.LENGTH_LONG
-            ).show();
-            finish();
-            return;
-        }
-
-        isAdmin = currentUserId.equals(room.getAdminId());
-        deleteBtn.setVisibility(isAdmin ? View.VISIBLE : View.GONE);
-        roomInfoText.setText(isAdmin
-                ? "Room ID: " + roomId + "  |  Frontend admin"
-                : "Room ID: " + roomId + "  |  Frontend participant");
-        setComposerEnabled(true);
-        observeMessages();
+        FirebaseHelper.loadRoom(
+                roomId,
+                room -> {
+                    isAdmin = currentUserId.equals(room.getAdminId());
+                    deleteBtn.setVisibility(isAdmin ? View.VISIBLE : View.GONE);
+                    roomInfoText.setText(isAdmin
+                            ? "Room ID: " + roomId + "  |  Admin"
+                            : "Room ID: " + roomId + "  |  Participant");
+                    setComposerEnabled(true);
+                    observeMessages();
+                },
+                exception -> {
+                    Toast.makeText(
+                            this,
+                            FirebaseHelper.toUserMessage(exception, "loading room"),
+                            Toast.LENGTH_LONG
+                    ).show();
+                    finish();
+                }
+        );
     }
 
     private void observeMessages() {
         if (messageSubscription != null) {
-            messageSubscription.unsubscribe();
+            messageSubscription.remove();
         }
 
-        messageSubscription = LocalChatRepository.observeMessages(this, roomId, messages -> {
-            messageList.clear();
-            messageList.addAll(messages);
-            adapter.notifyDataSetChanged();
-            if (!messageList.isEmpty()) {
-                recyclerView.scrollToPosition(messageList.size() - 1);
-            }
-        });
+        messageSubscription = FirebaseHelper.observeMessages(
+                roomId,
+                messages -> {
+                    messageList.clear();
+                    messageList.addAll(messages);
+                    adapter.notifyDataSetChanged();
+                    if (!messageList.isEmpty()) {
+                        recyclerView.scrollToPosition(messageList.size() - 1);
+                    }
+                },
+                exception -> Toast.makeText(
+                        this,
+                        FirebaseHelper.toUserMessage(exception, "loading messages"),
+                        Toast.LENGTH_LONG
+                ).show()
+        );
     }
 
     private void sendMessage() {
@@ -165,8 +220,10 @@ public class ChatActivity extends AppCompatActivity {
             return;
         }
 
+        setComposerEnabled(false);
         Message msg = new Message(
                 currentUserId,
+                currentUserName,
                 text,
                 null,
                 null,
@@ -176,14 +233,16 @@ public class ChatActivity extends AppCompatActivity {
                 System.currentTimeMillis()
         );
 
-        LocalChatRepository.addMessage(this, roomId, msg);
-        messageInput.setText("");
+        sendMessage(msg, "sending message", () -> {
+            messageInput.setText("");
+            setComposerEnabled(true);
+        });
     }
 
     private void confirmDeleteRoom() {
         new AlertDialog.Builder(this)
                 .setTitle("Delete this room?")
-                .setMessage("This removes the room and all locally stored messages from the frontend app.")
+                .setMessage("This removes the room, its messages, and uploaded attachments for everyone.")
                 .setPositiveButton("Delete", (dialog, which) -> deleteRoom())
                 .setNegativeButton("Cancel", null)
                 .show();
@@ -191,9 +250,21 @@ public class ChatActivity extends AppCompatActivity {
 
     private void deleteRoom() {
         deleteBtn.setEnabled(false);
-        LocalChatRepository.deleteRoom(this, roomId);
-        Toast.makeText(this, "Room deleted", Toast.LENGTH_SHORT).show();
-        finish();
+        FirebaseHelper.deleteRoomAndContents(
+                roomId,
+                () -> {
+                    Toast.makeText(this, "Room deleted", Toast.LENGTH_SHORT).show();
+                    finish();
+                },
+                exception -> {
+                    deleteBtn.setEnabled(true);
+                    Toast.makeText(
+                            this,
+                            FirebaseHelper.toUserMessage(exception, "deleting room"),
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+        );
     }
 
     private void toggleRecording() {
@@ -213,7 +284,11 @@ public class ChatActivity extends AppCompatActivity {
         File cacheDirectory = getExternalCacheDir() != null ? getExternalCacheDir() : getCacheDir();
         filePath = new File(cacheDirectory, "voice_" + System.currentTimeMillis() + ".3gp").getAbsolutePath();
 
-        recorder = new MediaRecorder();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            recorder = new MediaRecorder(this);
+        } else {
+            recorder = new MediaRecorder();
+        }
         recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
         recorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
         recorder.setOutputFile(filePath);
@@ -251,26 +326,41 @@ public class ChatActivity extends AppCompatActivity {
             return;
         }
 
-        File voiceFile = new File(filePath);
-        Uri voiceUri = FileProvider.getUriForFile(
-                this,
-                getPackageName() + ".fileprovider",
-                voiceFile
-        );
-
-        Message msg = new Message(
-                currentUserId,
-                "",
-                voiceUri.toString(),
-                voiceFile.getName(),
-                "audio/3gpp",
+        setComposerEnabled(false);
+        FileUploadHelper.uploadVoiceRecording(
                 filePath,
-                "voice",
-                System.currentTimeMillis()
-        );
+                roomId,
+                new FileUploadHelper.UploadCallback() {
+                    @Override
+                    public void onSuccess(@NonNull FileUploadHelper.UploadedFile uploadedFile) {
+                        Message msg = new Message(
+                                currentUserId,
+                                currentUserName,
+                                "",
+                                uploadedFile.getDownloadUrl(),
+                                uploadedFile.getFileName(),
+                                uploadedFile.getMimeType(),
+                                uploadedFile.getStoragePath(),
+                                "voice",
+                                System.currentTimeMillis()
+                        );
+                        sendMessage(msg, "sending voice message", () -> {
+                            setComposerEnabled(true);
+                            deleteLocalRecording();
+                        });
+                    }
 
-        LocalChatRepository.addMessage(this, roomId, msg);
-        filePath = null;
+                    @Override
+                    public void onFailure(@NonNull Exception exception) {
+                        setComposerEnabled(true);
+                        Toast.makeText(
+                                ChatActivity.this,
+                                FirebaseHelper.toUserMessage(exception, "uploading voice message"),
+                                Toast.LENGTH_LONG
+                        ).show();
+                    }
+                }
+        );
     }
 
     private void pickFile() {
@@ -286,48 +376,39 @@ public class ChatActivity extends AppCompatActivity {
         } catch (SecurityException ignored) {
         }
 
-        Message msg = new Message(
-                currentUserId,
-                "",
-                fileUri.toString(),
-                queryDisplayName(fileUri),
-                getContentResolver().getType(fileUri),
-                fileUri.toString(),
-                "file",
-                System.currentTimeMillis()
-        );
+        setComposerEnabled(false);
+        FileUploadHelper.uploadFile(
+                this,
+                fileUri,
+                roomId,
+                new FileUploadHelper.UploadCallback() {
+                    @Override
+                    public void onSuccess(@NonNull FileUploadHelper.UploadedFile uploadedFile) {
+                        Message msg = new Message(
+                                currentUserId,
+                                currentUserName,
+                                "",
+                                uploadedFile.getDownloadUrl(),
+                                uploadedFile.getFileName(),
+                                uploadedFile.getMimeType(),
+                                uploadedFile.getStoragePath(),
+                                "file",
+                                System.currentTimeMillis()
+                        );
+                        sendMessage(msg, "sending attachment", () -> setComposerEnabled(true));
+                    }
 
-        LocalChatRepository.addMessage(this, roomId, msg);
-    }
-
-    @NonNull
-    private String queryDisplayName(@NonNull Uri fileUri) {
-        Cursor cursor = null;
-        try {
-            cursor = getContentResolver().query(
-                    fileUri,
-                    new String[]{OpenableColumns.DISPLAY_NAME},
-                    null,
-                    null,
-                    null
-            );
-            if (cursor != null && cursor.moveToFirst()) {
-                int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                if (index >= 0) {
-                    String name = cursor.getString(index);
-                    if (name != null && !name.trim().isEmpty()) {
-                        return name.trim();
+                    @Override
+                    public void onFailure(@NonNull Exception exception) {
+                        setComposerEnabled(true);
+                        Toast.makeText(
+                                ChatActivity.this,
+                                FirebaseHelper.toUserMessage(exception, "uploading attachment"),
+                                Toast.LENGTH_LONG
+                        ).show();
                     }
                 }
-            }
-        } catch (Exception ignored) {
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
-        }
-
-        return "attachment_" + System.currentTimeMillis();
+        );
     }
 
     private void setComposerEnabled(boolean enabled) {
@@ -370,8 +451,31 @@ public class ChatActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         if (messageSubscription != null) {
-            messageSubscription.unsubscribe();
+            messageSubscription.remove();
             messageSubscription = null;
         }
+        if (roomId != null && currentUserId != null) {
+            FirebaseHelper.leaveMember(roomId, currentUserId);
+        }
+    }
+
+    private void sendMessage(
+            @NonNull Message message,
+            @NonNull String action,
+            @NonNull Runnable onSuccess
+    ) {
+        FirebaseHelper.sendMessage(
+                roomId,
+                message,
+                onSuccess::run,
+                exception -> {
+                    setComposerEnabled(true);
+                    Toast.makeText(
+                            this,
+                            FirebaseHelper.toUserMessage(exception, action),
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+        );
     }
 }

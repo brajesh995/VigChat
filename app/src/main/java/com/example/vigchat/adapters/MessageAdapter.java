@@ -47,7 +47,12 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.ViewHold
         Message msg = messages.get(position);
         boolean isCurrentUser = currentUserId != null && currentUserId.equals(msg.getSenderId());
 
-        holder.senderText.setText(isCurrentUser ? "You" : "Participant");
+        String displayName = msg.getSenderName();
+        if (displayName == null || displayName.trim().isEmpty()) {
+            displayName = isCurrentUser ? "You" : "Participant";
+        }
+        
+        holder.senderText.setText(displayName);
         holder.metaText.setText(timeFormat.format(new Date(msg.getTimestamp())));
 
         if ("voice".equals(msg.getType())) {

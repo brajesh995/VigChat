@@ -240,6 +240,7 @@ public class LocalChatRepository {
         JSONObject json = new JSONObject();
         try {
             json.put("senderId", message.getSenderId());
+            json.put("senderName", message.getSenderName());
             json.put("text", message.getText());
             json.put("fileUrl", message.getFileUrl());
             json.put("fileName", message.getFileName());
@@ -256,6 +257,7 @@ public class LocalChatRepository {
     private static Message fromMessageJson(@NonNull JSONObject json) {
         return new Message(
                 json.optString("senderId"),
+                json.optString("senderName"),
                 json.optString("text"),
                 nullableString(json.optString("fileUrl", null)),
                 nullableString(json.optString("fileName", null)),
@@ -289,10 +291,13 @@ public class LocalChatRepository {
             } else {
                 try {
                     Uri uri = Uri.parse(storagePath);
-                    if ("file".equalsIgnoreCase(uri.getScheme())) {
-                        File file = new File(uri.getPath());
-                        if (file.exists()) {
-                            file.delete();
+                    if (uri != null && "file".equalsIgnoreCase(uri.getScheme())) {
+                        String path = uri.getPath();
+                        if (path != null) {
+                            File file = new File(path);
+                            if (file.exists()) {
+                                file.delete();
+                            }
                         }
                     }
                 } catch (Exception ignored) {

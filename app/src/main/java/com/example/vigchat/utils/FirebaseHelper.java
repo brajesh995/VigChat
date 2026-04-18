@@ -14,13 +14,17 @@ import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageException;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class FirebaseHelper {
 
@@ -38,6 +42,10 @@ public class FirebaseHelper {
 
     public interface CompletionCallback {
         void onComplete();
+    }
+
+    public interface MessagesCallback {
+        void onMessagesLoaded(@NonNull List<Message> messages);
     }
 
     private FirebaseHelper() {
@@ -73,9 +81,8 @@ public class FirebaseHelper {
             String normalizedCode = errorCode == null ? "" : errorCode.toUpperCase(Locale.US);
 
             if (normalizedCode.contains("CONFIGURATION_NOT_FOUND")) {
-                return "Firebase Authentication is not configured for this app. In Firebase Console for project "
-                        + "\"claprojectmad\", open Authentication, click Get started, and make sure the app "
-                        + "configuration is valid for package com.example.vigchat.";
+                return "Firebase Authentication is not configured for this app. In Firebase Console, "
+                        + "open Authentication, click Get started, and enable Anonymous sign-in.";
             }
 
             if (normalizedCode.contains("OPERATION_NOT_ALLOWED")) {
@@ -84,10 +91,6 @@ public class FirebaseHelper {
 
             if (normalizedCode.contains("NETWORK_REQUEST_FAILED")) {
                 return "Network error while " + action + ". Check internet access and try again.";
-            }
-
-            if (normalizedCode.contains("API_NOT_AVAILABLE")) {
-                return "Google Play services or Firebase services are not available on this device.";
             }
         }
 
@@ -98,31 +101,30 @@ public class FirebaseHelper {
         if (exception instanceof FirebaseFirestoreException) {
             FirebaseFirestoreException firestoreException = (FirebaseFirestoreException) exception;
             if (firestoreException.getCode() == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
-                return "Firestore denied access. Publish the firestore.rules file to your Firebase project before testing CRUD.";
+                return "Firestore denied access. Please check your Firebase Database Rules or ensure the database is initialized.";
+            }
+            if (firestoreException.getCode() == FirebaseFirestoreException.Code.UNAVAILABLE) {
+                return "Firebase Database is unavailable. Check your internet connection.";
             }
         }
 
         if (exception instanceof StorageException) {
             int errorCode = ((StorageException) exception).getErrorCode();
-            if (errorCode == StorageException.ERROR_NOT_AUTHENTICATED) {
-                return "Storage upload failed because the user is not authenticated.";
-            }
             if (errorCode == StorageException.ERROR_NOT_AUTHORIZED) {
-                return "Storage denied access. Publish the storage.rules file to your Firebase project before testing file and voice uploads.";
+                return "Storage denied access. Please check your Firebase Storage Rules.";
             }
         }
 
         String rawMessage = exception.getMessage();
-        if (rawMessage != null && rawMessage.toUpperCase(Locale.US).contains("CONFIGURATION_NOT_FOUND")) {
-            return "Firebase Authentication is not configured for this app. In Firebase Console for project "
-                    + "\"claprojectmad\", open Authentication, click Get started, and verify package com.example.vigchat.";
+        if (rawMessage != null && rawMessage.toUpperCase(Locale.US).contains("PERMISSION_DENIED")) {
+            return "Access Denied: Please set your Firebase Database rules to 'Test Mode' or enable access.";
         }
 
         if (rawMessage != null && !rawMessage.trim().isEmpty()) {
             return "Error while " + action + ": " + rawMessage;
         }
 
-        return "Error while " + action + ".";
+        return "Connection timed out or error while " + action + ". Make sure Firestore is enabled in Firebase Console.";
     }
 
     public static CollectionReference roomsCollection() {
@@ -164,6 +166,69 @@ public class FirebaseHelper {
                 .addOnFailureListener(onFailure::onFailure);
     }
 
+    public static void joinMember(@NonNull String roomId, @NonNull String userId) {
+        Map<String, Object> memberData = new HashMap<>();
+        memberData.put("joinedAt", System.currentTimeMillis());
+        roomsCollection().document(roomId).collection("members").document(userId).set(memberData);
+    }
+
+    public static void leaveMember(@NonNull String roomId, @NonNull String userId) {
+        DocumentReference roomRef = roomsCollection().document(roomId);
+        roomRef.collection("members").document(userId).delete()
+                .addOnSuccessListener(unused -> {
+                    // Check if room is empty
+                    roomRef.collection("members").limit(1).get()
+                            .addOnSuccessListener(snapshot -> {
+                                if (snapshot.isEmpty()) {
+                                    deleteRoomAndContents(roomId, () -> {}, e -> {});
+                                }
+                            });
+                });
+    }
+
+    public static void sendMessage(
+            @NonNull String roomId,
+            @NonNull Message message,
+            @NonNull CompletionCallback onSuccess,
+            @NonNull FailureCallback onFailure
+    ) {
+        roomsCollection()
+                .document(roomId)
+                .collection("messages")
+                .add(message)
+                .addOnSuccessListener(documentReference -> onSuccess.onComplete())
+                .addOnFailureListener(onFailure::onFailure);
+    }
+
+    @NonNull
+    public static ListenerRegistration observeMessages(
+            @NonNull String roomId,
+            @NonNull MessagesCallback onSuccess,
+            @NonNull FailureCallback onFailure
+    ) {
+        return roomsCollection()
+                .document(roomId)
+                .collection("messages")
+                .orderBy("timestamp", Query.Direction.ASCENDING)
+                .addSnapshotListener((snapshot, error) -> {
+                    if (error != null) {
+                        onFailure.onFailure(error);
+                        return;
+                    }
+
+                    List<Message> messages = new ArrayList<>();
+                    if (snapshot != null) {
+                        for (DocumentSnapshot documentSnapshot : snapshot.getDocuments()) {
+                            Message message = documentSnapshot.toObject(Message.class);
+                            if (message != null) {
+                                messages.add(message);
+                            }
+                        }
+                    }
+                    onSuccess.onMessagesLoaded(messages);
+                });
+    }
+
     public static void deleteRoomAndContents(
             @NonNull String roomId,
             @NonNull CompletionCallback onSuccess,
@@ -192,14 +257,21 @@ public class FirebaseHelper {
             deleteTasks.add(documentSnapshot.getReference().delete());
         }
 
-        Task<List<Task<?>>> allDeletes = deleteTasks.isEmpty()
-                ? Tasks.forResult(new ArrayList<Task<?>>())
-                : Tasks.whenAllComplete(deleteTasks);
+        // Also delete the members collection contents
+        roomRef.collection("members").get().addOnSuccessListener(memberSnapshot -> {
+            for (DocumentSnapshot doc : memberSnapshot.getDocuments()) {
+                deleteTasks.add(doc.getReference().delete());
+            }
 
-        allDeletes
-                .addOnSuccessListener(results -> roomRef.delete()
-                        .addOnSuccessListener(unused -> onSuccess.onComplete())
-                        .addOnFailureListener(onFailure::onFailure))
-                .addOnFailureListener(onFailure::onFailure);
+            Task<List<Task<?>>> allDeletes = deleteTasks.isEmpty()
+                    ? Tasks.forResult(new ArrayList<Task<?>>())
+                    : Tasks.whenAllComplete(deleteTasks);
+
+            allDeletes
+                    .addOnSuccessListener(results -> roomRef.delete()
+                            .addOnSuccessListener(unused -> onSuccess.onComplete())
+                            .addOnFailureListener(onFailure::onFailure))
+                    .addOnFailureListener(onFailure::onFailure);
+        }).addOnFailureListener(onFailure::onFailure);
     }
 }

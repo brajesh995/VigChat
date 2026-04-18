@@ -1,21 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/ic_launcher_foreground"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.VigChat">
-        
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -23,6 +25,21 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Handle Room Links (HTTPS) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="https"
+                    android:host="vigchat.app"
+                    android:pathPrefix="/chat/" />
+            </intent-filter>
+
+            <!-- Handle Custom App Links (vigchat://) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
@@ -30,16 +47,19 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data
-                    android:host="vigchat.app"
-                    android:pathPrefix="/chat/"
-                    android:scheme="https" />
-                <data
+                    android:scheme="vigchat"
                     android:host="chat"
-                    android:pathPrefix="/"
-                    android:scheme="vigchat" />
+                    android:pathPrefix="/" />
+            </intent-filter>
+
+            <!-- Allow receiving shared links from other apps -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
-        
+
         <activity android:name=".activities.CreateRoomActivity" />
         <activity
             android:name=".activities.ChatActivity"
@@ -55,7 +75,7 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-        
+
     </application>
 
 </manifest>
